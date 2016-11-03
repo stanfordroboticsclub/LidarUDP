@@ -4,12 +4,12 @@ import time
 import signal
 from UDPComms import Publisher
 
-# import msgpack
-import json
+import msgpack
+#import json
 from rplidar import RPLidar
 
-pub = Publisher("data",  "10240s", 8110)
-lidar = RPLidar('/dev/ttyUSB1')
+pub = Publisher("data",  "4096s", 8110)
+lidar = RPLidar('/dev/ttyUSB0')
 
 def signal_term_handler(signal, frame):
     lidar.stop()
@@ -18,6 +18,14 @@ def signal_term_handler(signal, frame):
  
 signal.signal(signal.SIGTERM, signal_term_handler)
 
-for scan in lidar.iter_scans(scan_type='express'):
-    pub.send(json.dumps(scan))
+try:
+    for scan in lidar.iter_scans():
+        #print(scan)
+        #print(msgpack.packb(scan))
+        #print()
+        pub.send(msgpack.packb(scan))
+except:
+    pass
+finally:
+    signal_term_handler(None,None)
 

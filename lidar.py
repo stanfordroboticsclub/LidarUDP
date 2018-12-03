@@ -7,8 +7,8 @@ from UDPComms import Publisher
 
 from rplidar import RPLidar
 
-pub = Publisher("json",  "2048s", 8110)
-lidar = RPLidar('/dev/ttyUSB0')
+pub = Publisher("json",  "4096s", 8110)
+lidar = RPLidar('/dev/ttyUSB1')
 
 def signal_term_handler(signal, frame):
     lidar.stop()

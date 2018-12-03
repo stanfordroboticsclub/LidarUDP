@@ -2,7 +2,7 @@
 Description=UDP Publisher for RP Lidar data
 
 [Service]
-ExecStart=/home/pi/LidarUDP/lidar.py
+ExecStart=/usr/bin/python3 /home/pi/LidarUDP/lidar.py
 Restart=always
 RestartSec=5
 

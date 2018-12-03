@@ -1,0 +1,10 @@
+[Unit]
+Description=UDP Publisher for RP Lidar data
+
+[Service]
+ExecStart=/home/pi/LidarUDP/lidar.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -3,6 +3,7 @@
 FOLDER=$(dirname $(realpath "$0"))
 cd $FOLDER
 
+yes | sudo pip3 install msgpack
 yes | sudo pip3 install rplidar-roboticia
 
 for file in *.service; do

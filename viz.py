@@ -11,8 +11,6 @@ canvas = tk.Canvas(r,width=500,height=500)
 canvas.pack()
 
 
-
-
 def create_point(x,y):
     canvas.create_oval(x, y, x, y, width = 1, fill = '#000000')
 
@@ -27,8 +25,7 @@ def update():
         for _, angle, dist in data:
             print(angle,dist)
             a = math.radians(angle)
-            create_point(math.sin(a) * dist/10 +250, math.cos(a) * dist/10 +250)
-
+            create_point(250 + math.sin(a) * dist/10, 250 - math.cos(a) * dist/10)
         print()
     finally:
         r.after(100,update)

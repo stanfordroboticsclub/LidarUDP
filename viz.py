@@ -5,34 +5,68 @@ import math
 import time
 
 
-SIDE = 1000
+WINDOW_SIDE = 1000
+MM_PER_PIX = 4
 
-sub = UDPComms.Subscriber("data",  "4096s", 8110, 1)
-odom = UDPComms.Subscriber("l r",  "ff", 8820, timeout = 2)
-print (odom.timeout)
+MM_PER_INCH =2.54
 
-r = tk.Tk()
-canvas = tk.Canvas(r,width=SIDE,height=SIDE)
-canvas.pack()
 
-time.sleep(2)
+class Map:
 
-print("getting")
-print( odom.get() )
+    def __init__(self,map_topic, world_frame):
+        self.x_size_m = 40
+        self.y_size_m = 40
+        self.resolution = 0.05
+
+        self.x_size_g = int(self.x_size_m/self.resolution)
+        self.y_size_g = int(self.y_size_m/self.resolution)
+
+        self.map = [ float("nan") ] * self.y_size_g*self.x_size_g
+
+        # self.map_pub = UDPComms.Publisher(8888)
+
+    def __getitem__(self, key):
+        x = int((key[0] + self.x_size_m/2)/self.resolution)
+        y = int((key[1] + self.y_size_m/2)/self.resolution)
+        return self.map[ y * self.x_size_g + x ]
+
+    def __setitem__(self, key, value):
+        x = int((key[0] + self.x_size_m/2)/self.resolution)
+        y = int((key[1] + self.y_size_m/2)/self.resolution)
+        self.map[ y * self.x_size_g + x ] = value
+
+    def get_raw(self, x , y):
+        return self.map[ y * self.x_size_g + x ]
+
+    def set_raw(self, x , y, value):
+        self.map[ y * self.x_size_g + x ] = value
+
+    def publish_map(self):
+        pass
+        
 
 class Robot:
-
     def __init__(self, l, r):
 
         # self.sub = subscriber
 
+        # self.th measured CCW from X axis
         self.x = 0
         self.y = 0
-        self.th = 0
+        self.th = math.pi/2
 
-        self.WHEEL_RAD = 6.5/2 # inch
-        self.WHEEL_BASE = 18 # inch
-        self.wheel_l, self.wheel_r = l, r
+        self.WHEEL_RAD = MM_PER_INCH * 6.5/2 #mm
+        self.WHEEL_BASE = MM_PER_INCH * 18  #mm
+        self.wheel_l, self.wheel_r = l, r #rotations
+
+        self.lidar_offset_forward = MM_PER_INCH * 18
+
+    def get_pose(self):
+        return (self.x, self.y, self.th)
+
+    def convert_lidar_to_map(self, angle, dist):
+        return (self.x + dist * math.cos(angle + self.th) + self.lidar_offset_forward * math.cos(self.th), 
+                self.y + dist * math.sin(angle + self.th) + self.lidar_offset_forward * math.sin(self.th))
 
     def update(self, l ,r):
         # import pdb; pdb.set_trace()
@@ -46,46 +80,51 @@ class Robot:
         self.wheel_l = l
         self.wheel_r = r
 
-        vx =   (dist_l + dist_r) / 2
-        vth =  (dist_r - dist_l) / self.WHEEL_BASE
+        v_right   = 0
+        v_forward = (dist_l + dist_r) / 2
+        v_th      = (dist_r - dist_l) / self.WHEEL_BASE
 
-        vy = 0
-        delta_x = (vx * math.cos(self.th + vth/2) ) # - vy * math.sin(th))
-        delta_y = (vx * math.sin(self.th + vth/2) ) # + vy * math.cos(th))
+        delta_x = (v_forward * math.cos(self.th + v_th/2) ) # - v_right * math.sin(th)) # needed fro omni robots
+        delta_y = (v_forward * math.sin(self.th + v_th/2) ) # + v_right * math.cos(th))
 
         self.x += delta_x;
         self.y += delta_y;
-        self.th += vth;
+        self.th += v_th;
 
         print( self.x, self.y, self.th)
 
+
+
+sub = UDPComms.Subscriber("data",  "4096s", 8110, 1)
+odom = UDPComms.Subscriber("l r",  "ff", 8820, timeout = 2)
 rob = Robot( *odom.get() )
 
-def create_point(x,y):
-    canvas.create_oval(x, y, x, y, width = 1, fill = '#000000')
+
+class LidarWindow:
+    def __init__(self):
+        print (odom.timeout)
+
+        self.root = tk.Tk()
+        self.canvas = tk.Canvas(self.root,width=WINDOW_SIDE,height=WINDOW_SIDE)
+        self.canvas.pack()
 
 
-arrow_length = 10
+        arrow_length = 10
+        arrow = canvas.create_line(0, 0, SIDE, SIDE, arrow=tk.LAST)
 
-arrow = canvas.create_line(0, 0, SIDE, SIDE, arrow=tk.LAST)
+        time.sleep(2)
 
-
-def convert_lidar_to_map(rob_x, rob_y, rob_th, angle, dist):
-    return( rob_x + dist * math.cos( angle + rob_th) + 18 * 2.54, rob_y + dist * math.sin( angle + rob_th) )
-
-
-def convert_map_to_cavnas(in_x, in_y):
-    y= SIDE/2 - in_x / SCALE
-    x= SIDE/2 + in_y / SCALE
-    return (x,y)
+        self.root.after(100,update)
+        self.root.mainloop()
 
 
-SCALE = 4
+    def create_point(self,x,y):
+        self.canvas.create_oval(x, y, x, y, width = 1, fill = '#000000')
 
-INCH_to_mm =2.54
-INCH_to_mm =2.5
-INCH_to_mm =3.5
-INCH_to_mm =5.08
+    def convert_map_to_cavnas(self,in_x, in_y):
+        y= SIDE/2 - in_x / WINDOW_SIDE
+        x= SIDE/2 + in_y / WINDOW_SIDE
+        return (x,y)
 
 def update():
     global arrow
@@ -99,7 +138,7 @@ def update():
         data = unpacker.unpack()
         
 
-        rob_x, rob_y = convert_map_to_cavnas(rob.x * INCH_to_mm, rob.y * INCH_to_mm)
+        rob_x, rob_y = convert_map_to_cavnas(rob.x * MM_PER_INCH, rob.y * MM_PER_INCH)
 
         canvas.delete(arrow)
         arrow = canvas.create_line(rob_x, rob_y, rob_x + arrow_length*math.sin(rob.th),
@@ -115,7 +154,7 @@ def update():
             a = math.radians(angle)
 
 
-            point_x, point_y = convert_lidar_to_map( rob.x * INCH_to_mm , rob.y * INCH_to_mm, rob.th, a, dist/ SCALE )
+            point_x, point_y = convert_lidar_to_map( rob.x * MM_PER_INCH , rob.y * MM_PER_INCH, rob.th, a, dist/ SCALE )
             # print(angle,dist, point_x, point_y)
             create_point( *convert_map_to_cavnas(point_x, point_y ) )
         print()
@@ -126,9 +165,5 @@ def update():
 
 
 
-
-
-r.after(100,update)
-r.mainloop()
 
 

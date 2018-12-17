@@ -4,6 +4,8 @@ import tkinter as tk
 import math
 import time
 
+import numpy as np
+
 
 RATE = 100
 WINDOW_SIDE = 1000
@@ -12,53 +14,56 @@ MM_PER_PIX = 4
 MM_PER_INCH =2.54
 
 
-class Map:
-
-    def __init__(self,map_topic, world_frame):
-        self.x_size_m = 40 # chagne to mm?
-        self.y_size_m = 40
+class SDFMap:
+    def __init__(self):
+        self.size_m = 40 # chagne to mm?
         self.resolution = 0.05
 
-        self.x_size_g = int(self.x_size_m/self.resolution)
-        self.y_size_g = int(self.y_size_m/self.resolution)
+        self.size_g = int(self.size_m/self.resolution)
 
-        self.map = [ [float("nan")]*self.y_size_g for _ in range(self.x_size_g)] 
+        self.map = [ [float("nan")]*self.y_size_g for _ in range(self.size_g)] 
 
         # self.map_pub = UDPComms.Publisher(8888)
 
-    def up(self,key):
-        pass
+    def up(self, idx):
+        "ceiling of index"
+        return int((idx + self.size_m/2)/self.resolution) + 1
 
-    def down(self, key):
-        x = int((key[0] + self.x_size_m/2)/self.resolution)
+    def dw(self, idx):
+        "floor of index"
+        return int((idx + self.size_m/2)/self.resolution)
+
+    def fc(self, idx):
+        "fractional part of index"
+        return (idx + self.size_m/2) % self.resolution
 
     def __getitem__(self, key):
-        x = int((key[0] + self.x_size_m/2)/self.resolution)
+        x = int((key[0] + self.size_m/2)/self.resolution)
         y = int((key[1] + self.y_size_m/2)/self.resolution)
-        return self.map[ y * self.x_size_g + x ]
+        return self.map[ y * self.size_g + x ]
 
     def __setitem__(self, key, value):
-        x = int((key[0] + self.x_size_m/2)/self.resolution)
+        x = int((key[0] + self.size_m/2)/self.resolution)
         y = int((key[1] + self.y_size_m/2)/self.resolution)
-        self.map[ y * self.x_size_g + x ] = value
+        self.map[ y * self.size_g + x ] = value
 
-    def get_raw(self, x , y):
-        return self.map[ y * self.x_size_g + x ]
-
-    def set_raw(self, x , y, value):
-        self.map[ y * self.x_size_g + x ] = value
 
     def publish_map(self):
         pass
 
-    def interpolate(self):
+
+    def interpolate(self, x, y):
+
+        self.map[self.dw(x)][self.dw(y)]
+        self.map[self.up(x)][self.dw(y)]
+
+        self.map[self.dw(x)][self.up(y)]
+        self.map[self.up(x)][self.up(y)]
+
+
+    def interpolate_derivative(self, x, y):
         pass
 
-    def interpolate_derivative(self):
-        pass
-
-    def scan_match(self):
-        pass
         
 
 class Robot:
@@ -115,10 +120,57 @@ class Robot:
         print(self.x, self.y, self.th)
 
 
+class SLAM:
+    def __init__(self):
+        self.lidar = UDPComms.Subscriber("data",  "4096s", 8110, 1)
+        self.robot = Robot()
+        self.sdf = SDFMap()
 
-sub = UDPComms.Subscriber("data",  "4096s", 8110, 1)
+    def update(self):
+        scan = self.lidar.get()
 
-rob = Robot( *odom.get() )
+        self.robot.update_odom()
+        pose = self.sdf.scan_match(scan)
+        self.robot.set_pose(*pose)
+        self.update_sdf(scan)
+
+    def get_map(self):
+        pass
+
+    def get_pose(self):
+        return self.robot.get_pose()
+
+    def get_lidar(self):
+        for _, angle, dist in data:
+            a = math.radians(angle)
+            yield self.robot.lidar_to_map(a, dist)
+
+
+    def update_sdf(self, pose, scan):
+        # will probably move to SLAM
+        pass
+
+    def scan_match(self):
+
+        # d (x,y)/ d(rob_x, rob_y, rob_th)
+        # [n, 2, 3] where n in number of scans
+        dPointdPose = robot.get_transform(scan)
+
+        # [n, 2]
+        points = robot.lidar_to_map(scan)
+
+        # [n, 2]  dM/ d(x,y)
+        dMdPoint = sfd.interpolate_derivative(points) 
+
+        # (x,y,th) [3] = [n, 2, _] @ [n,2 ,3]
+        Map_derivate = np.sum(dMdPoint[...,np.newaxis] @ dPointdPose, axis=(0,1))
+
+        # aprox = current_M + Map_derivate * dPose = 0 
+
+        #  dPose = Map_derivate ^-1 @  (-current_M)
+
+        M + a*x + b*y + c*z =0
+
 
 class LidarWindow:
     def __init__(self):
@@ -127,6 +179,8 @@ class LidarWindow:
         self.root = tk.Tk()
         self.canvas = tk.Canvas(self.root,width=WINDOW_SIDE,height=WINDOW_SIDE)
         self.canvas.pack()
+
+        self.slam = SLAM()
 
         self.arrow = canvas.create_line(0, 0, SIDE, SIDE, arrow=tk.LAST)
 
@@ -148,26 +202,19 @@ class LidarWindow:
     def update(self):
         try:
 
-            rob.update_odom()
-            pose = sdf.scan_match()
-            rob.set_pose(*pose)
-
             unpacker = msgpack.Unpacker()
             unpacker.feed(sub.get().data)
             data = unpacker.unpack()
 
-            rob_x, rob_y = self.to_canvas(rob.x, rob.y)
-
             canvas.delete(self.arrow)
-            self.arrow = canvas.pose(*self.to_canvas(rob.x, rob.y), rob.th )
+
+            x, y, th = self.slam.get_pose()
+            self.arrow = canvas.pose(*self.to_canvas(x, y), th )
             
             # canvas.delete('all')
 
-            for _, angle, dist in data:
-                a = math.radians(angle)
-
-                point_x, point_y = rob.lidar_to_map(a, dist)
-                create_point( *self.to_canvas(point_x, point_y ) )
+            for x,y in self.slam.get_lidar()
+                create_point( *self.to_canvas(x, y ) )
             print()
 
 

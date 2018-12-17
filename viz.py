@@ -23,7 +23,8 @@ class SDFMap:
 
         self.size_g = int(self.size_mm/self.resolution)
 
-        self.map = [ [float("nan")]*self.y_size_g for _ in range(self.size_g)] 
+        # TODO: figure out what defaut works
+        self.map = [ [0]*self.y_size_g for _ in range(self.size_g)] 
 
         # self.map_pub = UDPComms.Publisher(8888)
 
@@ -165,8 +166,12 @@ class SLAM:
             yield self.robot.lidar_to_map(a, dist)
 
 
-    def update_sdf(self, pose, scan):
-        # TODO
+    def update_sdf(self, scan):
+        """ first janky update rule """
+
+        for angle,dist in scan:
+            a = math.rad(angle)
+
         pass
 
     def scan_match(self):
@@ -219,6 +224,9 @@ class LidarWindow:
     def create_pose(self,x,y, th):
         return canvas.create_line(x, y, x + 10*math.sin(th),
                                         y - 10*math.cos(th), arrow=tk.LAST)
+
+    def create_map(self, sdf):
+        pass
 
     def to_canvas(self,x, y):
         y= WINDOW_SIDE/2 - x / MM_PER_PIX

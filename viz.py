@@ -1,25 +1,52 @@
-import msgpack
-import UDPComms
-import tkinter as tk
+#!/usr/bin/env python3
+
 import math
 import time
+import tkinter as tk
 
 import numpy as np
+
+import msgpack
+import UDPComms
+
 
 MM_PER_INCH =2.54
 
 WINDOW_SIDE = 1000
 MM_PER_PIX = 4
 
-RESOLUTION = 5
+RESOLUTION_MM = 250
 MAP_SIZE_M = 30
 RATE = 100
+
+
+class Line:
+    def __init__(self,m, b):
+        # p = 
+        self.m =m
+        self.b = b
+
+    def get_distance(self,point):
+        pass
+
+    @classmethod
+    def from_points(cls, points):
+        A = np.array(points)
+        y = A[:,1].copy()
+        A[:,1] = 1
+
+        # ax + b = y
+        a,b = np.linalg.pinv(A) @ y
+
+        return cls(a,b)
+
+
 
 
 class SDFMap:
     def __init__(self):
         self.size_mm = MAP_SIZE_M * 1000
-        self.resolution = RESOLUTION
+        self.resolution = RESOLUTION_MM
 
         self.size_g = int(self.size_mm/self.resolution)
 
@@ -67,7 +94,6 @@ class SDFMap:
         
         return M
 
-
     def interpolate_derivative(self, x, y):
         bl = self.map[self.dw(x)][self.dw(y)]
         br = self.map[self.up(x)][self.dw(y)]
@@ -75,13 +101,10 @@ class SDFMap:
         tl = self.map[self.dw(x)][self.up(y)]
         tr = self.map[self.up(x)][self.up(y)]
 
-        if np.sign(bl) == np.sign(br) == np.sign(tl) == np.sign(tr):
-            dx = self.fc(y)* (br - bl) + (1 - self.fc(y))* (tr - tl)  
-            dy = self.fc(x)* (tl - bl) + (1 - self.fc(x))* (tr - br)  
-            return (dx,dy)
-
-        pass
-
+        # if np.sign(bl) == np.sign(br) == np.sign(tl) == np.sign(tr):
+        dx = self.fc(y)* (br - bl) + (1 - self.fc(y))* (tr - tl)  
+        dy = self.fc(x)* (tl - bl) + (1 - self.fc(x))* (tr - br)  
+        return (dx,dy)
         
 
 class Robot:
@@ -137,7 +160,6 @@ class Robot:
 
         print(self.x, self.y, self.th)
 
-
 class SLAM:
     def __init__(self):
         self.lidar = UDPComms.Subscriber("data",  "4096s", 8110, 1)
@@ -169,10 +191,24 @@ class SLAM:
     def update_sdf(self, scan):
         """ first janky update rule """
 
-        for angle,dist in scan:
-            a = math.rad(angle)
+        points = {}
+        for x,y in self.get_lidar():
+            ind_x = self.sdf.down(x)
+            ind_y = self.sdf.down(y)
+            points[ (ind_x,ind_y) ] = points.get( (ind_x,ind_y) , []) + [(x,y)]
 
-        pass
+
+        for key, values in points.items():
+            if len(values) < 2:
+                continue
+
+            A = np.array(values)
+            y = A[:,1].copy()
+            A[:,1] = 1
+
+            a,b = np.linalg.pinv(A) @ y
+
+
 
     def scan_match(self):
         Map_derivate = np.zeros((3))

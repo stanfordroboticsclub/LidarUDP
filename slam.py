@@ -15,31 +15,49 @@ MM_PER_INCH =2.54
 WINDOW_SIDE = 1000
 MM_PER_PIX = 4
 
-RESOLUTION_MM = 250
-MAP_SIZE_M = 30
+RESOLUTION_MM = 500
+MAP_SIZE_M = 4
 RATE = 100
 
 
 class Line:
-    def __init__(self,m, b):
-        # p = 
-        self.m =m
+    def __init__(self, a, b, c):
+        # ax + by + c = 0
+        self.a = a
         self.b = b
-
-    def get_distance(self,point):
-        pass
+        self.c = c
 
     @classmethod
-    def from_points(cls, points):
+    def from_mc(cls, m, c):
+        y = mx + c
+        return cls(m, -1, c)
+
+    def get_distance(self,point):
+        # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
+        x, y = point
+        return math.fabs(self.a * x + self.b * y + self.c) \
+               /math.sqrt(self.a**2 + self.b**2)
+
+    @classmethod
+    def from_fit(cls, points):
         A = np.array(points)
         y = A[:,1].copy()
         A[:,1] = 1
 
-        # ax + b = y
-        a,b = np.linalg.pinv(A) @ y
+        # mx + c = y
+        m,c = np.linalg.pinv(A) @ y
+        return cls.from_mc(m,c)
 
-        return cls(a,b)
+    @classmethod
+    def from_points(cls, p1, p2):
+        x1, y1 = p1
+        x2, y2 = p2
 
+        a = y2 - y1
+        b = x1 - x2
+
+        c = x2 * y1 - y2 * x1
+        return cls(a,b,c)
 
 
 
@@ -51,7 +69,7 @@ class SDFMap:
         self.size_g = int(self.size_mm/self.resolution)
 
         # TODO: figure out what defaut works
-        self.map = [ [0]*self.y_size_g for _ in range(self.size_g)] 
+        self.map = [ [0]*self.size_g for _ in range(self.size_g)] 
 
         # self.map_pub = UDPComms.Publisher(8888)
 
@@ -108,9 +126,9 @@ class SDFMap:
         
 
 class Robot:
-    def __init__(self, l, r):
+    def __init__(self):
 
-        self.odom = UDPComms.Subscriber("l r",  "ff", 8820, timeout = 2)
+        self.odom = UDPComms.Subscriber(8820, timeout = 2)
 
         # self.th measured CCW from X axis
         self.x = 0
@@ -119,7 +137,7 @@ class Robot:
 
         self.WHEEL_RAD = MM_PER_INCH * 6.5/2 #mm
         self.WHEEL_BASE = MM_PER_INCH * 18  #mm
-        self.wheel_l, self.wheel_r = self.odom.recv() #rotations
+        # self.wheel_l, self.wheel_r = self.odom.recv() #rotations
 
         self.lidar_offset_forward = MM_PER_INCH * 18
 
@@ -136,6 +154,7 @@ class Robot:
                 self.y + dist * math.sin(angle + self.th) + self.lidar_offset_forward * math.sin(self.th))
 
     def update_odom(self):
+        return
         # import pdb; pdb.set_trace()
         l, r = self.odom.get()
 
@@ -162,7 +181,7 @@ class Robot:
 
 class SLAM:
     def __init__(self):
-        self.lidar = UDPComms.Subscriber("data",  "4096s", 8110, 1)
+        self.lidar = UDPComms.Subscriber(8110, 1)
         self.robot = Robot()
         self.sdf = SDFMap()
 
@@ -183,7 +202,7 @@ class SLAM:
         return self.robot.get_pose()
 
     def get_lidar(self):
-        for _, angle, dist in data:
+        for _, angle, dist in self.lidar.get():
             a = math.radians(angle)
             yield self.robot.lidar_to_map(a, dist)
 
@@ -249,45 +268,41 @@ class LidarWindow:
 
         self.slam = SLAM()
 
-        self.arrow = canvas.create_line(0, 0, 1, 1, arrow=tk.LAST)
+        self.arrow = self.canvas.create_line(0, 0, 1, 1, arrow=tk.LAST)
 
-        self.root.after(RATE,update)
+        self.root.after(RATE,self.update)
         self.root.mainloop()
 
     def create_point(self,x,y):
         return self.canvas.create_oval(x, y, x, y, width = 1, fill = '#000000')
 
     def create_pose(self,x,y, th):
-        return canvas.create_line(x, y, x + 10*math.sin(th),
+        return self.canvas.create_line(x, y, x + 10*math.sin(th),
                                         y - 10*math.cos(th), arrow=tk.LAST)
 
     def create_map(self, sdf):
         pass
 
     def to_canvas(self,x, y):
-        y= WINDOW_SIDE/2 - x / MM_PER_PIX
-        x= WINDOW_SIDE/2 + y / MM_PER_PIX
-        return (x,y)
+        y_new= WINDOW_SIDE/2 - x / MM_PER_PIX
+        x_new= WINDOW_SIDE/2 + y / MM_PER_PIX
+        return (x_new,y_new)
 
     def update(self):
         try:
-
-            unpacker = msgpack.Unpacker()
-            unpacker.feed(sub.get().data)
-            data = unpacker.unpack()
-
-            canvas.delete(self.arrow)
+            self.canvas.delete(self.arrow)
 
             x, y, th = self.slam.get_pose()
-            self.arrow = canvas.pose(*self.to_canvas(x, y), th )
+            print(self.slam.get_pose())
+            self.arrow = self.create_pose(*self.to_canvas(x, y), th )
             
-            # canvas.delete('all')
-            for x,y in self.slam.get_lidar()
-                create_point( *self.to_canvas(x, y ) )
+            # self.canvas.delete('all')
+            for x,y in self.slam.get_lidar():
+                self.create_point( *self.to_canvas(x, y ) )
             print()
 
         finally:
-            r.after(RATE,update)
+            self.root.after(RATE,self.update)
 
 if __name__ == "__main__":
     window = LidarWindow()

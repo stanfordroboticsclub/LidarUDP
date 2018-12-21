@@ -29,7 +29,7 @@ class Line:
 
     @classmethod
     def from_mc(cls, m, c):
-        y = mx + c
+        # y = mx + c
         return cls(m, -1, c)
 
     def get_distance(self,point):
@@ -63,10 +63,6 @@ class Line:
 
 class SDFMap:
 
-    SW = [ self.dw, self.dw ]
-    NW = [ self.dw, self.up ]
-    SE = [ self.up, self.dw ]
-    NE = [ self.up, self.up ]
 
     def __init__(self):
         self.size_mm = MAP_SIZE_M * 1000
@@ -79,32 +75,74 @@ class SDFMap:
 
         # self.map_pub = UDPComms.Publisher(8888)
 
-    def up(self, idx):
-        "ceiling of index"
-        return int((idx + self.size_mm/2)/self.resolution) + 1
+        self.modes = [[ self.dw, self.dw ],
+                        [ self.dw, self.up ],
+                        [ self.up, self.dw ],
+                        [ self.up, self.up ]]
 
-    def dw(self, idx):
-        "floor of index"
-        return int((idx + self.size_mm/2)/self.resolution)
+    def real(self, idx):
+        "coords from index"
+        return idx * self.resolution - self.size_mm/2
 
-    def fc(self, idx):
-        "fractional part of index"
-        return (idx + self.size_mm/2) % self.resolution
+    def up(self, coords):
+        "ceiling of index from coord"
+        return int((coords + self.size_mm/2)/self.resolution) + 1
+
+    def dw(self, coords):
+        "floor of index from coord"
+        return int((coords + self.size_mm/2)/self.resolution)
+
+    def fc(self, coords):
+        "fractional part of index from coord"
+        return (coords + self.size_mm/2) % self.resolution
+
+    def round(self, mode, key):
+        "roudned coords from coords"
+        # 32
+        # 01
+        if mode == 0:
+            return (self.real(self.dw(key[0])), self.real(self.dw(key[1])) )
+        elif mode == 1:
+            return (self.real(self.up(key[0])), self.real(self.dw(key[1])) )
+        elif mode == 2:
+            return (self.real(self.up(key[0])), self.real(self.up(key[1])) )
+        elif mode == 3:
+            return (self.real(self.dw(key[0])), self.real(self.up(key[1])) )
+        else:
+            assert False
 
     def __getitem__(self, key):
-        x = int((key[0] + self.size_mm/2)/self.resolution)
-        y = int((key[1] + self.size_mm/2)/self.resolution)
-        return self.map[ y * self.size_g + x ]
+        mode, x, y = key
+        # 32
+        # 01
+        if mode == 0:
+            return self.map[ self.dw(x) ][ self.dw(y) ]
+        elif mode == 1:
+            return self.map[ self.up(x) ][ self.dw(y) ]
+        elif mode == 2:
+            return self.map[ self.up(x) ][ self.up(y) ]
+        elif mode == 3:
+            return self.map[ self.dw(x) ][ self.up(y) ]
+        else:
+            assert False
 
     def __setitem__(self, key, value):
-        x = int((key[0] + self.size_mm/2)/self.resolution)
-        y = int((key[1] + self.size_mm/2)/self.resolution)
-        self.map[ y * self.size_g + x ] = value
-
+        mode, x, y = key
+        # 32
+        # 01
+        if mode == 0:
+            self.map[ self.dw(x) ][ self.dw(y) ] = value
+        elif mode == 1:
+            self.map[ self.up(x) ][ self.dw(y) ] = value
+        elif mode == 2:
+            self.map[ self.up(x) ][ self.up(y) ] = value
+        elif mode == 3:
+            self.map[ self.dw(x) ][ self.up(y) ] = value
+        else:
+            assert False
 
     def publish_map(self):
         pass
-
 
     def interpolate(self, x, y):
         bl = self.map[self.dw(x)][self.dw(y)]
@@ -224,16 +262,21 @@ class SLAM:
             points[ (ind_x,ind_y) ] = points.get( (ind_x,ind_y) , []) + [(x,y)]
 
 
-        print(points)
         for key, values in points.items():
             if len(values) < 2:
                 continue
+            print( key, values)
 
             line = Line.from_fit(values)
 
-            self.sdf.map[ self.sdf.dw(key[0]) ][ self.sdf.dw(key[1]) ] = \
-                    line.get_distance( ( self.sdf.dw(key[0]) , self.sdf.dw(key[1]) )
-            
+
+            point = values[0]
+
+            # key is in index space !1
+            # it should be in coord space!
+            for mode in range(4):
+                self.sdf[mode,point[0],point[1]] = \
+                    line.get_distance(  self.sdf.round(mode, point) )
 
 
     def scan_match(self):

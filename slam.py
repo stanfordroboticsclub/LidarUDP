@@ -62,6 +62,12 @@ class Line:
 
 
 class SDFMap:
+
+    SW = [ self.dw, self.dw ]
+    NW = [ self.dw, self.up ]
+    SE = [ self.up, self.dw ]
+    NE = [ self.up, self.up ]
+
     def __init__(self):
         self.size_mm = MAP_SIZE_M * 1000
         self.resolution = RESOLUTION_MM
@@ -188,20 +194,21 @@ class SLAM:
     def update(self):
         scan = self.lidar.get()
 
-        self.robot.update_odom()
+        # self.robot.update_odom()
 
-        for _ in range(5):
-            pose = self.sdf.scan_match(scan)
-            self.robot.set_pose(*pose)
+        # for _ in range(5):
+        #     pose = self.sdf.scan_match(scan)
+        #     self.robot.set_pose(*pose)
         self.update_sdf(scan)
 
     def get_map(self):
-        pass
+        return self.sdf.map
 
     def get_pose(self):
         return self.robot.get_pose()
 
     def get_lidar(self):
+        # TODO: change to stored scan?
         for _, angle, dist in self.lidar.get():
             a = math.radians(angle)
             yield self.robot.lidar_to_map(a, dist)
@@ -212,21 +219,21 @@ class SLAM:
 
         points = {}
         for x,y in self.get_lidar():
-            ind_x = self.sdf.down(x)
-            ind_y = self.sdf.down(y)
+            ind_x = self.sdf.dw(x)
+            ind_y = self.sdf.dw(y)
             points[ (ind_x,ind_y) ] = points.get( (ind_x,ind_y) , []) + [(x,y)]
 
 
+        print(points)
         for key, values in points.items():
             if len(values) < 2:
                 continue
 
-            A = np.array(values)
-            y = A[:,1].copy()
-            A[:,1] = 1
+            line = Line.from_fit(values)
 
-            a,b = np.linalg.pinv(A) @ y
-
+            self.sdf.map[ self.sdf.dw(key[0]) ][ self.sdf.dw(key[1]) ] = \
+                    line.get_distance( ( self.sdf.dw(key[0]) , self.sdf.dw(key[1]) )
+            
 
 
     def scan_match(self):
@@ -290,8 +297,13 @@ class LidarWindow:
 
     def update(self):
         try:
-            self.canvas.delete(self.arrow)
+            self.slam.update()
 
+            for row in self.slam.get_map():
+                print(row)
+            print()
+
+            self.canvas.delete(self.arrow)
             x, y, th = self.slam.get_pose()
             print(self.slam.get_pose())
             self.arrow = self.create_pose(*self.to_canvas(x, y), th )

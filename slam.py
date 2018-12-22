@@ -27,6 +27,9 @@ class Line:
         self.b = b
         self.c = c
 
+    def get_y(self,x):
+        return (- self.a * x - self.c)/self.b
+
     @classmethod
     def from_mc(cls, m, c):
         # y = mx + c
@@ -275,8 +278,18 @@ class SLAM:
             # key is in index space !1
             # it should be in coord space!
             for mode in range(4):
-                self.sdf[mode,point[0],point[1]] = \
-                    line.get_distance(  self.sdf.round(mode, point) )
+                try:
+                    corner = self.sdf.round(mode, point)
+
+                    s = 1
+                    if np.sign(line.get_y(corner[0] ) ) == \
+                       np.sign( line.get_y(self.robot.get_pose()[0]) ):
+                        s = -1
+
+                    self.sdf[mode,point[0],point[1]] = \
+                        s * line.get_distance( corner )
+                except IndexError:
+                    pass
 
 
     def scan_match(self):
@@ -342,9 +355,26 @@ class LidarWindow:
         try:
             self.slam.update()
 
-            for row in self.slam.get_map():
-                print(row)
-            print()
+
+            np.set_printoptions(precision=4, linewidth= 150)
+            print( np.array( self.slam.get_map() ))
+            # for row in self.slam.get_map():
+            #     print(row)
+            # print()
+
+            for x in range(self.slam.sdf.size_g):
+                for y in range(self.slam.sdf.size_g):
+                    px,py = self.to_canvas( self.slam.sdf.real(x), self.slam.sdf.real(y) )
+
+                    if self.slam.sdf.map[x][y] == 0:
+                        color = (0, 0, 255)
+                    else:
+                        color  = ( int(255*self.slam.sdf.map[x][y])//1000, 0,0 ) if \
+                                self.slam.sdf.map[x][y] > 0  else \
+                                ( 0,255, -int(255*self.slam.sdf.map[x][y])//1000  )
+
+                    self.canvas.create_rectangle(px, py, px + 10, py + 10, fill = \
+                                                 "#%02x%02x%02x" % color    )
 
             self.canvas.delete(self.arrow)
             x, y, th = self.slam.get_pose()

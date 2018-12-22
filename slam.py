@@ -15,7 +15,7 @@ MM_PER_INCH =2.54
 WINDOW_SIDE = 1000
 MM_PER_PIX = 4
 
-RESOLUTION_MM = 500
+RESOLUTION_MM = 250
 MAP_SIZE_M = 4
 RATE = 100
 
@@ -227,10 +227,12 @@ class Robot:
         print(self.x, self.y, self.th)
 
 class SLAM:
-    def __init__(self):
+    def __init__(self, window):
         self.lidar = UDPComms.Subscriber(8110, 1)
         self.robot = Robot()
         self.sdf = SDFMap()
+
+        self.window = window
 
     def update(self):
         scan = self.lidar.get()
@@ -278,16 +280,35 @@ class SLAM:
             # key is in index space !1
             # it should be in coord space!
             for mode in range(4):
+                corner = self.sdf.round(mode, point)
+
+                s = 1
+
+                # line_x1 = corner[0]
+                # line_y1 = line.get_y(line_x1)
+
+                # line_x2 = self.robot.get_pose()[0]
+                # line_y2 = line.get_y(self.robot.get_pose()[0])
+
+                if np.sign( line.get_y(corner[0]) - corner[1] ) == \
+                   np.sign( line.get_y(self.robot.get_pose()[0]) - self.robot.get_pose()[0] ):
+                    s = -1
+
+                if mode == 0:
+                    self.window.canvas.create_line(*self.window.to_canvas( \
+                corner[0], line.get_y(corner[0])), \
+                                                  *self.window.to_canvas( \
+                corner[0] + self.sdf.resolution , line.get_y(corner[0] + self.sdf.resolution)) )
+
                 try:
-                    corner = self.sdf.round(mode, point)
+                    dist = line.get_distance( corner )
 
-                    s = 1
-                    if np.sign(line.get_y(corner[0] ) ) == \
-                       np.sign( line.get_y(self.robot.get_pose()[0]) ):
-                        s = -1
+                    if math.fabs( dist ) < math.fabs(self.sdf[mode,point[0],point[1]]) or \
+                       self.sdf[mode,point[0],point[1]] == 0:
+                        self.sdf[mode,point[0],point[1]] = s * dist
 
-                    self.sdf[mode,point[0],point[1]] = \
-                        s * line.get_distance( corner )
+
+
                 except IndexError:
                     pass
 
@@ -329,7 +350,7 @@ class LidarWindow:
         self.canvas = tk.Canvas(self.root,width=WINDOW_SIDE,height=WINDOW_SIDE)
         self.canvas.pack()
 
-        self.slam = SLAM()
+        self.slam = SLAM(self)
 
         self.arrow = self.canvas.create_line(0, 0, 1, 1, arrow=tk.LAST)
 
@@ -352,6 +373,7 @@ class LidarWindow:
         return (x_new,y_new)
 
     def update(self):
+        update_start = time.time()
         try:
             self.slam.update()
 
@@ -375,7 +397,6 @@ class LidarWindow:
 
                     self.canvas.create_rectangle(px, py, px + 10, py + 10, fill = \
                                                  "#%02x%02x%02x" % color    )
-
             self.canvas.delete(self.arrow)
             x, y, th = self.slam.get_pose()
             print(self.slam.get_pose())
@@ -387,6 +408,7 @@ class LidarWindow:
             print()
 
         finally:
+            print("update time", (time.time() - update_start ) *1000 )
             self.root.after(RATE,self.update)
 
 if __name__ == "__main__":

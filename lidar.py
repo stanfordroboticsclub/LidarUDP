@@ -7,7 +7,7 @@ from UDPComms import Publisher
 import msgpack
 import rplidar
 
-pub = Publisher("data",  "4096s", 8110)
+pub = Publisher(8110)
 
 use_express = False
 possible_ports = ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/tty.SLAB_USBtoUART']
@@ -30,8 +30,7 @@ signal.signal(signal.SIGTERM, signal_term_handler)
 
 try:
     for scan in lidar.iter_scans(scan_type = "express" if use_express else "normal"):
-        #print(scan)
-        pub.send(msgpack.packb(scan))
+        pub.send(scan)
 except:
     pass
 finally:

@@ -99,8 +99,10 @@ class SDFMap:
         "fractional part of index from coord"
         # out = (coords + self.size_mm/2) % self.resolution
         out = ((coords + self.size_mm/2)/self.resolution) - self.dw(coords)
-        assert 0<= out and out <= 1, "not in bound " + str(out)
-        return out
+        if 0<= out and out <= 1:
+            return out
+        else:
+            raise IndexError
 
     def round(self, mode, key):
         "roudned coords from coords"
@@ -245,9 +247,14 @@ class SLAM:
 
         # self.robot.update_odom()
 
-        # for _ in range(5):
-        #     pose = self.sdf.scan_match(scan)
-        #     self.robot.set_pose(*pose)
+        orig = self.robot.get_pose()
+
+        for _ in range(5):
+            pose = self.scan_match(scan)
+            self.robot.set_pose(*pose)
+        print(pose)
+
+        # self.robot.set_pose(*orig)
         self.update_sdf(scan)
 
     def get_map(self):
@@ -309,33 +316,38 @@ class SLAM:
                     pass
 
 
-    def scan_match(self):
+    def scan_match(self, scan):
         Map_derivate = np.zeros((3))
         current_M = 0
-        for angle,dist in scan:
-            a = math.rad(angle)
+        for _,angle,dist in scan:
+            a = math.radians(angle)
             th = a + self.robot.th
 
             # d (x,y)/ d(rob_x, rob_y, rob_th)
             dPointdPose = np.array( [[1, 0, math.cos(th)], [0, 1,  math.sin(th)]] )
 
             # (x, y)
-            point = robot.lidar_to_map(a,dist)
+            point = self.robot.lidar_to_map(a,dist)
 
-            # current_M
-            M = sdf.interpolate(point)
-            current_M += M**2
+            try:
+                # current_M
+                M = self.sdf.interpolate(*point)
+                current_M += M**2
 
-            # dM/ d(x,y)
-            dMdPoint = 2 * M * np.array(sfd.interpolate_derivative(point))
+                # dM/ d(x,y)
+                dMdPoint = 2 * M * np.array(self.sdf.interpolate_derivative(*point))
 
-            # not handling sqare!!! ?
-            # (x,y,th) = [2, _] @ [2 ,3]
-            Map_derivate += dMdPoint @ dPointdPose
+                # not handling sqare!!! ?
+                # (x,y,th) = [2, _] @ [2 ,3]
+                Map_derivate += dMdPoint @ dPointdPose
+
+            except IndexError:
+                continue
 
         # aprox = current_M + Map_derivate * dPose = 0 
         #  dPose = Map_derivate ^-1 @  (-current_M)
-        dPose = np.linalg.pinv( dMdPose[np.newaxis, :] ) * (-current_M)
+        dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)
+        print("delta pose = ", dPose)
         return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
 
 

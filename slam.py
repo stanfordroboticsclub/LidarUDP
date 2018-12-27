@@ -17,7 +17,7 @@ MM_PER_PIX = 4
 
 RESOLUTION_MM = 250
 MAP_SIZE_M = 4
-RATE = 100
+RATE = 100 * 10 * 10
 
 
 class Line:
@@ -97,7 +97,10 @@ class SDFMap:
 
     def fc(self, coords):
         "fractional part of index from coord"
-        return (coords + self.size_mm/2) % self.resolution
+        # out = (coords + self.size_mm/2) % self.resolution
+        out = ((coords + self.size_mm/2)/self.resolution) - self.dw(coords)
+        assert 0<= out and out <= 1, "not in bound " + str(out)
+        return out
 
     def round(self, mode, key):
         "roudned coords from coords"
@@ -113,6 +116,9 @@ class SDFMap:
             return (self.real(self.dw(key[0])), self.real(self.up(key[1])) )
         else:
             assert False
+
+    def gen_pattern(self, point):
+        pass
 
     def __getitem__(self, key):
         mode, x, y = key
@@ -270,7 +276,6 @@ class SLAM:
         for key, values in points.items():
             if len(values) < 2:
                 continue
-            print( key, values)
 
             line = Line.from_fit(values)
 
@@ -283,13 +288,6 @@ class SLAM:
                 corner = self.sdf.round(mode, point)
 
                 s = 1
-
-                # line_x1 = corner[0]
-                # line_y1 = line.get_y(line_x1)
-
-                # line_x2 = self.robot.get_pose()[0]
-                # line_y2 = line.get_y(self.robot.get_pose()[0])
-
                 if np.sign( line.get_y(corner[0]) - corner[1] ) == \
                    np.sign( line.get_y(self.robot.get_pose()[0]) - self.robot.get_pose()[0] ):
                     s = -1
@@ -302,10 +300,9 @@ class SLAM:
 
                 try:
                     dist = line.get_distance( corner )
-
-                    if math.fabs( dist ) < math.fabs(self.sdf[mode,point[0],point[1]]) or \
-                       self.sdf[mode,point[0],point[1]] == 0:
-                        self.sdf[mode,point[0],point[1]] = s * dist
+                    # if math.fabs( dist ) < math.fabs(self.sdf[mode,point[0],point[1]]) or \
+                    # if self.sdf[mode,point[0],point[1]] == 0:
+                    self.sdf[mode,point[0],point[1]] = s * dist
 
 
 
@@ -350,11 +347,13 @@ class LidarWindow:
         self.canvas = tk.Canvas(self.root,width=WINDOW_SIDE,height=WINDOW_SIDE)
         self.canvas.pack()
 
+        self.canvas.bind("<Motion>", self.on_click)
+
         self.slam = SLAM(self)
 
         self.arrow = self.canvas.create_line(0, 0, 1, 1, arrow=tk.LAST)
 
-        self.root.after(RATE,self.update)
+        self.root.after(3000,self.update)
         self.root.mainloop()
 
     def create_point(self,x,y):
@@ -372,44 +371,56 @@ class LidarWindow:
         x_new= WINDOW_SIDE/2 + y / MM_PER_PIX
         return (x_new,y_new)
 
+    def from_canvas(self,x_new, y_new):
+        x = MM_PER_PIX * (WINDOW_SIDE/2  - y_new)
+        y = MM_PER_PIX * ( x_new - WINDOW_SIDE/2)
+        return (x,y)
+
+    def on_click(self,event):
+        point = self.from_canvas(event.x, event.y)
+        print(point, self.slam.sdf.interpolate(*point),
+              self.slam.sdf.interpolate_derivative(*point))
+
     def update(self):
         update_start = time.time()
         try:
             self.slam.update()
 
-
-            np.set_printoptions(precision=4, linewidth= 150)
-            print( np.array( self.slam.get_map() ))
-            # for row in self.slam.get_map():
-            #     print(row)
-            # print()
-
+            self.canvas.delete('all')
             for x in range(self.slam.sdf.size_g):
                 for y in range(self.slam.sdf.size_g):
+                    cord_x = self.slam.sdf.real(x)
+                    cord_y = self.slam.sdf.real(y)
+
                     px,py = self.to_canvas( self.slam.sdf.real(x), self.slam.sdf.real(y) )
 
-                    if self.slam.sdf.map[x][y] == 0:
+                    # print(x,y, cord_x, cord_y)
+
+                    # value = self.slam.sdf.map[x][y]
+                    try:
+                        value = self.slam.sdf.interpolate( cord_x,cord_y)
+                    except IndexError:
+                        continue
+                    if value == 0:
                         color = (0, 0, 255)
+                    elif value > 0:
+                        color  = ( int(255*value)//1000, 0,0 )
                     else:
-                        color  = ( int(255*self.slam.sdf.map[x][y])//1000, 0,0 ) if \
-                                self.slam.sdf.map[x][y] > 0  else \
-                                ( 0,255, -int(255*self.slam.sdf.map[x][y])//1000  )
+                        color = ( 0,255, -int(255*value)//1000  )
 
                     self.canvas.create_rectangle(px, py, px + 10, py + 10, fill = \
                                                  "#%02x%02x%02x" % color    )
             self.canvas.delete(self.arrow)
             x, y, th = self.slam.get_pose()
-            print(self.slam.get_pose())
+            # print(self.slam.get_pose())
             self.arrow = self.create_pose(*self.to_canvas(x, y), th )
             
-            # self.canvas.delete('all')
             for x,y in self.slam.get_lidar():
                 self.create_point( *self.to_canvas(x, y ) )
-            print()
 
         finally:
-            print("update time", (time.time() - update_start ) *1000 )
             self.root.after(RATE,self.update)
+            print("update time", (time.time() - update_start ) *1000 )
 
 if __name__ == "__main__":
     window = LidarWindow()

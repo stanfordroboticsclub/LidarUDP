@@ -17,7 +17,7 @@ MM_PER_PIX = 4
 
 RESOLUTION_MM = 250
 MAP_SIZE_M = 4
-RATE = 100 * 10 * 10
+RATE = 100 
 
 
 class Line:
@@ -301,9 +301,8 @@ class SLAM:
                 try:
                     dist = line.get_distance( corner )
                     # if math.fabs( dist ) < math.fabs(self.sdf[mode,point[0],point[1]]) or \
-                    # if self.sdf[mode,point[0],point[1]] == 0:
+                    #                     self.sdf[mode,point[0],point[1]] == 0:
                     self.sdf[mode,point[0],point[1]] = s * dist
-
 
 
                 except IndexError:
@@ -389,18 +388,9 @@ class LidarWindow:
             self.canvas.delete('all')
             for x in range(self.slam.sdf.size_g):
                 for y in range(self.slam.sdf.size_g):
-                    cord_x = self.slam.sdf.real(x)
-                    cord_y = self.slam.sdf.real(y)
-
                     px,py = self.to_canvas( self.slam.sdf.real(x), self.slam.sdf.real(y) )
 
-                    # print(x,y, cord_x, cord_y)
-
-                    # value = self.slam.sdf.map[x][y]
-                    try:
-                        value = self.slam.sdf.interpolate( cord_x,cord_y)
-                    except IndexError:
-                        continue
+                    value = self.slam.sdf.map[x][y]
                     if value == 0:
                         color = (0, 0, 255)
                     elif value > 0:
@@ -420,7 +410,7 @@ class LidarWindow:
 
         finally:
             self.root.after(RATE,self.update)
-            print("update time", (time.time() - update_start ) *1000 )
+            # print("update time", (time.time() - update_start ) *1000 )
 
 if __name__ == "__main__":
     window = LidarWindow()

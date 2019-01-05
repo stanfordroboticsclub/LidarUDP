@@ -15,7 +15,7 @@ MM_PER_INCH =2.54
 WINDOW_SIDE = 1000
 MM_PER_PIX = 4
 
-RESOLUTION_MM = 250
+RESOLUTION_MM = 400
 MAP_SIZE_M = 4
 RATE = 100 
 
@@ -175,9 +175,13 @@ class SDFMap:
         tr = self.map[self.up(x)][self.up(y)]
 
         # if np.sign(bl) == np.sign(br) == np.sign(tl) == np.sign(tr):
-        dx = self.fc(y)* (br - bl) + (1 - self.fc(y))* (tr - tl)  
-        dy = self.fc(x)* (tl - bl) + (1 - self.fc(x))* (tr - br)  
-        return (dx,dy)
+        # dx = self.fc(y)* (br - bl) + (1 - self.fc(y))* (tr - tl)  
+        # dy = self.fc(x)* (tl - bl) + (1 - self.fc(x))* (tr - br)  
+
+        dx = self.fc(y)* (tr - tl) + (1 - self.fc(y))* (br - bl)
+        dy = self.fc(x)* (tr - br) + (1 - self.fc(x))* (tl - bl)
+
+        return (dx/RESOLUTION_MM, dy/RESOLUTION_MM)
         
 
 class Robot:
@@ -242,6 +246,9 @@ class SLAM:
 
         self.window = window
 
+
+        self.mapped = 0
+
     def update(self):
         scan = self.lidar.get()
 
@@ -249,13 +256,18 @@ class SLAM:
 
         orig = self.robot.get_pose()
 
-        for _ in range(5):
+        for _ in range(1):
             pose = self.scan_match(scan)
             self.robot.set_pose(*pose)
-        print(pose)
+        # print(pose)
 
-        # self.robot.set_pose(*orig)
-        self.update_sdf(scan)
+        # self.robot.set_pose(*pose[:2], orig[2])
+
+        self.robot.set_pose(*orig)
+
+        if self.mapped < 10:
+            self.update_sdf(scan)
+            self.mapped += 1
 
     def get_map(self):
         return self.sdf.map
@@ -317,38 +329,48 @@ class SLAM:
 
 
     def scan_match(self, scan):
-        Map_derivate = np.zeros((3))
+        # Map_derivate = np.zeros((3))
+        Map_derivate = np.zeros((1))
         current_M = 0
         for _,angle,dist in scan:
             a = math.radians(angle)
             th = a + self.robot.th
 
             # d (x,y)/ d(rob_x, rob_y, rob_th)
-            dPointdPose = np.array( [[1, 0, math.cos(th)], [0, 1,  math.sin(th)]] )
+            # dPointdPose = np.array( [[1, 0, math.cos(th)], [0, 1,  math.sin(th)]] )
+            dPointdPose = np.array( [[1], [0]] )
 
             # (x, y)
             point = self.robot.lidar_to_map(a,dist)
 
+            if self.sdf.dw(point[0]) != 4 or \
+               self.sdf.dw(point[1]) != 4:
+                continue
+
+
             try:
                 # current_M
                 M = self.sdf.interpolate(*point)
+            except IndexError:
+                continue
+            else:
                 current_M += M**2
 
                 # dM/ d(x,y)
                 dMdPoint = 2 * M * np.array(self.sdf.interpolate_derivative(*point))
-
                 # not handling sqare!!! ?
                 # (x,y,th) = [2, _] @ [2 ,3]
                 Map_derivate += dMdPoint @ dPointdPose
 
-            except IndexError:
-                continue
 
         # aprox = current_M + Map_derivate * dPose = 0 
         #  dPose = Map_derivate ^-1 @  (-current_M)
         dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)
+        print("current M", current_M)
+        print("map derivative", Map_derivate)
         print("delta pose = ", dPose)
-        return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
+        return tuple(np.array(self.robot.get_pose()))
+        # return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
 
 
 

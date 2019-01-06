@@ -265,7 +265,7 @@ class SLAM:
 
         self.robot.set_pose(*orig)
 
-        if self.mapped < 10:
+        if self.mapped < 5:
             self.update_sdf(scan)
             self.mapped += 1
 
@@ -330,23 +330,25 @@ class SLAM:
 
     def scan_match(self, scan):
         # Map_derivate = np.zeros((3))
-        Map_derivate = np.zeros((1))
+        Map_derivate = np.zeros((2))
         current_M = 0
         for _,angle,dist in scan:
             a = math.radians(angle)
             th = a + self.robot.th
 
             # d (x,y)/ d(rob_x, rob_y, rob_th)
-            # dPointdPose = np.array( [[1, 0, math.cos(th)], [0, 1,  math.sin(th)]] )
-            dPointdPose = np.array( [[1], [0]] )
+            # dPointdPose = np.array( [[1, 0, dist* math.cos(th)], 
+            #                          [0, 1, dist* math.sin(th)]] )
+            dPointdPose = np.array( [[1, 0],# dist* math.cos(th)], 
+                                     [0, 1]])# dist* math.sin(th)]] )
+            # dPointdPose = np.array( [[1], [0]] )
 
             # (x, y)
             point = self.robot.lidar_to_map(a,dist)
 
-            if self.sdf.dw(point[0]) != 4 or \
-               self.sdf.dw(point[1]) != 4:
-                continue
-
+            # if self.sdf.dw(point[0]) != 4 or \
+            #    self.sdf.dw(point[1]) != 4:
+            #     continue
 
             try:
                 # current_M
@@ -368,11 +370,9 @@ class SLAM:
         dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)
         print("current M", current_M)
         print("map derivative", Map_derivate)
-        print("delta pose = ", dPose)
+        print("delta pose = \n", dPose)
         return tuple(np.array(self.robot.get_pose()))
         # return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
-
-
 
 class LidarWindow:
     def __init__(self):

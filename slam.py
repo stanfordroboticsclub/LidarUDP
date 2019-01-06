@@ -263,7 +263,7 @@ class SLAM:
         # sum_pose = np.zeros(3)
 
 
-        for _ in range(1):
+        for _ in range(3):
             delta_pose = self.scan_match(scan)
             # sum_pose += delta_pose
 
@@ -375,14 +375,20 @@ class SLAM:
                 # (x,y,th) = [2, _] @ [2 ,3]
                 Map_derivate += dMdPoint @ dPointdPose
 
-
         # aprox = current_M + Map_derivate * dPose = 0 
         #  dPose = Map_derivate ^-1 @  (-current_M)
-        dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)
+
+        A = np.block( [ [Map_derivate], [ 0.1 * np.diag([1,1,100] )] ] )
+        b = np.block( [ [-current_M], [np.zeros((3, 1))] ] )
+
+        dPose = np.linalg.pinv(A) @ (b)
+
+        # dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)
         print("current M", current_M)
         print("map derivative", Map_derivate)
         print("delta pose = \n", dPose)
         return dPose[:,0]
+        # return dPose[:,0]
         # return tuple(np.array(self.robot.get_pose()))
         # return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
 

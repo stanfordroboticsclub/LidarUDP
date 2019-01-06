@@ -263,7 +263,7 @@ class SLAM:
         # sum_pose = np.zeros(3)
 
 
-        for _ in range(3):
+        for _ in range(5):
             delta_pose = self.scan_match(scan)
             # sum_pose += delta_pose
 
@@ -346,8 +346,10 @@ class SLAM:
             th = a + self.robot.th
 
             # d (x,y)/ d(rob_x, rob_y, rob_th)
-            dPointdPose = np.array( [[1, 0, -dist* math.cos(th)], 
-                                     [0, 1, dist* math.sin(th)]] )
+            dPointdPose = np.array( [[1, 0, -dist* math.sin(th)], 
+                                     [0, 1, dist* math.cos(th)]] )
+            # dPointdPose = np.array( [[1, 0, -dist* math.cos(th)], 
+            #                          [0, 1, dist* math.sin(th)]] )
             # dPointdPose = np.array( [[1, 0],# dist* math.cos(th)], 
                                      # [0, 1]])# dist* math.sin(th)]] )
             # dPointdPose = np.array( [[1], [0]] )
@@ -355,9 +357,9 @@ class SLAM:
             # (x, y)
             point = self.robot.lidar_to_map(a,dist)
 
-            if self.sdf.dw(point[0]) != 4 or \
-               self.sdf.dw(point[1]) != 4:
-                continue
+            # if self.sdf.dw(point[0]) != 4 or \
+            #    self.sdf.dw(point[1]) != 4:
+            #     continue
 
             try:
                 # current_M
@@ -378,19 +380,25 @@ class SLAM:
         # aprox = current_M + Map_derivate * dPose = 0 
         #  dPose = Map_derivate ^-1 @  (-current_M)
 
-        A = np.block( [ [Map_derivate], [ 0.1 * np.diag([1,1,100] )] ] )
-        b = np.block( [ [-current_M], [np.zeros((3, 1))] ] )
+        # regualrised newton-gauss
+        # A = np.block( [ [Map_derivate], [ 0.1 * np.diag([1,1,100] )] ] )
+        # b = np.block( [ [-current_M], [np.zeros((3, 1))] ] )
 
-        dPose = np.linalg.pinv(A) @ (b)
+        # dPose = np.linalg.pinv(A) @ (b)
 
+        # gradient desent
+        learning_rate = np.array([ -0.001, -0.001, -0.00000001])
+        print("current M", current_M)
+        print("map derivative", learning_rate * Map_derivate)
+        return  learning_rate* Map_derivate
+
+        # straight netwton-gauss
         # dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)
+
         print("current M", current_M)
         print("map derivative", Map_derivate)
         print("delta pose = \n", dPose)
         return dPose[:,0]
-        # return dPose[:,0]
-        # return tuple(np.array(self.robot.get_pose()))
-        # return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
 
 class LidarWindow:
     def __init__(self):

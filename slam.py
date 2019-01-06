@@ -263,7 +263,7 @@ class SLAM:
         # sum_pose = np.zeros(3)
 
 
-        for _ in range(5):
+        for _ in range(10):
             delta_pose = self.scan_match(scan)
             # sum_pose += delta_pose
 
@@ -381,16 +381,16 @@ class SLAM:
         #  dPose = Map_derivate ^-1 @  (-current_M)
 
         # regualrised newton-gauss
-        # A = np.block( [ [Map_derivate], [ 0.1 * np.diag([1,1,100] )] ] )
-        # b = np.block( [ [-current_M], [np.zeros((3, 1))] ] )
+        A = np.block( [ [Map_derivate], [ 10000 * np.diag([1,1,1000] )] ] )
+        b = np.block( [ [-current_M], [np.zeros((3, 1))] ] )
 
-        # dPose = np.linalg.pinv(A) @ (b)
+        dPose = np.linalg.pinv(A) @ (b)
 
         # gradient desent
-        learning_rate = np.array([ -0.001, -0.001, -0.00000001])
-        print("current M", current_M)
-        print("map derivative", learning_rate * Map_derivate)
-        return  learning_rate* Map_derivate
+        # learning_rate = np.array([ -0.001, -0.001, -0.00000001])
+        # print("current M", current_M)
+        # print("map derivative", learning_rate * Map_derivate)
+        # return  learning_rate* Map_derivate
 
         # straight netwton-gauss
         # dPose = np.linalg.pinv( Map_derivate[np.newaxis, :] ) * (-current_M)

@@ -62,8 +62,6 @@ class Line:
         c = x2 * y1 - y2 * x1
         return cls(a,b,c)
 
-
-
 class SDFMap:
 
 
@@ -182,7 +180,6 @@ class SDFMap:
         dy = self.fc(x)* (tr - br) + (1 - self.fc(x))* (tl - bl)
 
         return (dx/RESOLUTION_MM, dy/RESOLUTION_MM)
-        
 
 class Robot:
     def __init__(self):
@@ -245,7 +242,6 @@ class SLAM:
         self.sdf = SDFMap()
 
         self.window = window
-
 
         self.mapped = 0
 
@@ -339,7 +335,6 @@ class SLAM:
 
     def scan_match(self, scan):
         Map_derivate = np.zeros((3))
-        # Map_derivate = np.zeros((2))
         current_M = 0
         for _,angle,dist in scan:
             a = math.radians(angle)
@@ -348,11 +343,6 @@ class SLAM:
             # d (x,y)/ d(rob_x, rob_y, rob_th)
             dPointdPose = np.array( [[1, 0, -dist* math.sin(th)], 
                                      [0, 1, dist* math.cos(th)]] )
-            # dPointdPose = np.array( [[1, 0, -dist* math.cos(th)], 
-            #                          [0, 1, dist* math.sin(th)]] )
-            # dPointdPose = np.array( [[1, 0],# dist* math.cos(th)], 
-                                     # [0, 1]])# dist* math.sin(th)]] )
-            # dPointdPose = np.array( [[1], [0]] )
 
             # (x, y)
             point = self.robot.lidar_to_map(a,dist)
@@ -443,9 +433,9 @@ class LidarWindow:
     def update(self):
         update_start = time.time()
         try:
+            self.canvas.delete('all')
             self.slam.update()
 
-            self.canvas.delete('all')
             for x in range(self.slam.sdf.size_g):
                 for y in range(self.slam.sdf.size_g):
                     px,py = self.to_canvas( self.slam.sdf.real(x), self.slam.sdf.real(y) )

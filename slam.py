@@ -17,7 +17,7 @@ MM_PER_PIX = 4
 
 RESOLUTION_MM = 400
 MAP_SIZE_M = 4
-RATE = 100 
+RATE = 100
 
 
 class Line:
@@ -74,7 +74,7 @@ class SDFMap:
         self.size_g = int(self.size_mm/self.resolution)
 
         # TODO: figure out what defaut works
-        self.map = [ [0]*self.size_g for _ in range(self.size_g)] 
+        self.map = [ [None]*self.size_g for _ in range(self.size_g)] 
 
         # self.map_pub = UDPComms.Publisher(8888)
 
@@ -254,20 +254,29 @@ class SLAM:
 
         # self.robot.update_odom()
 
-        orig = self.robot.get_pose()
-
-        for _ in range(1):
-            pose = self.scan_match(scan)
-            self.robot.set_pose(*pose)
-        # print(pose)
-
-        # self.robot.set_pose(*pose[:2], orig[2])
-
-        self.robot.set_pose(*orig)
-
         if self.mapped < 5:
             self.update_sdf(scan)
             self.mapped += 1
+            return
+
+        # orig = self.robot.get_pose()
+        # sum_pose = np.zeros(3)
+
+
+        for _ in range(1):
+            delta_pose = self.scan_match(scan)
+            # sum_pose += delta_pose
+
+            
+            pose = self.robot.get_pose()
+            self.robot.set_pose(pose[0] + delta_pose[0],
+                               pose[1] + delta_pose[1],
+                               pose[2] + delta_pose[2])
+        # print("MAIN")
+        # print(sum_pose)
+
+        # self.robot.set_pose(*orig)
+
 
     def get_map(self):
         return self.sdf.map
@@ -329,31 +338,33 @@ class SLAM:
 
 
     def scan_match(self, scan):
-        # Map_derivate = np.zeros((3))
-        Map_derivate = np.zeros((2))
+        Map_derivate = np.zeros((3))
+        # Map_derivate = np.zeros((2))
         current_M = 0
         for _,angle,dist in scan:
             a = math.radians(angle)
             th = a + self.robot.th
 
             # d (x,y)/ d(rob_x, rob_y, rob_th)
-            # dPointdPose = np.array( [[1, 0, dist* math.cos(th)], 
-            #                          [0, 1, dist* math.sin(th)]] )
-            dPointdPose = np.array( [[1, 0],# dist* math.cos(th)], 
-                                     [0, 1]])# dist* math.sin(th)]] )
+            dPointdPose = np.array( [[1, 0, -dist* math.cos(th)], 
+                                     [0, 1, dist* math.sin(th)]] )
+            # dPointdPose = np.array( [[1, 0],# dist* math.cos(th)], 
+                                     # [0, 1]])# dist* math.sin(th)]] )
             # dPointdPose = np.array( [[1], [0]] )
 
             # (x, y)
             point = self.robot.lidar_to_map(a,dist)
 
-            # if self.sdf.dw(point[0]) != 4 or \
-            #    self.sdf.dw(point[1]) != 4:
-            #     continue
+            if self.sdf.dw(point[0]) != 4 or \
+               self.sdf.dw(point[1]) != 4:
+                continue
 
             try:
                 # current_M
                 M = self.sdf.interpolate(*point)
             except IndexError:
+                continue
+            except TypeError:
                 continue
             else:
                 current_M += M**2
@@ -371,7 +382,8 @@ class SLAM:
         print("current M", current_M)
         print("map derivative", Map_derivate)
         print("delta pose = \n", dPose)
-        return tuple(np.array(self.robot.get_pose()))
+        return dPose[:,0]
+        # return tuple(np.array(self.robot.get_pose()))
         # return tuple(np.array(self.robot.get_pose())+ dPose[:,0])
 
 class LidarWindow:
@@ -425,6 +437,9 @@ class LidarWindow:
                     px,py = self.to_canvas( self.slam.sdf.real(x), self.slam.sdf.real(y) )
 
                     value = self.slam.sdf.map[x][y]
+                    if value == None:
+                        value = 0
+
                     if value == 0:
                         color = (0, 0, 255)
                     elif value > 0:

@@ -4,7 +4,6 @@ import time
 import signal
 from UDPComms import Publisher
 
-import msgpack
 import rplidar
 
 pub = Publisher(8110)
@@ -31,8 +30,12 @@ signal.signal(signal.SIGTERM, signal_term_handler)
 try:
     for scan in lidar.iter_scans(scan_type = "express" if use_express else "normal"):
         pub.send(scan)
+        print('sending')
+    print("end")
 except:
+    raise
     pass
 finally:
+
     signal_term_handler(None,None)
 

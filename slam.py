@@ -256,8 +256,6 @@ class SLAM:
             return
 
         # orig = self.robot.get_pose()
-        # sum_pose = np.zeros(3)
-
 
         for _ in range(10):
             delta_pose = self.scan_match(scan)
@@ -268,8 +266,7 @@ class SLAM:
             self.robot.set_pose(pose[0] + delta_pose[0],
                                pose[1] + delta_pose[1],
                                pose[2] + delta_pose[2])
-        # print("MAIN")
-        # print(sum_pose)
+        # self.update_sdf(scan)
 
         # self.robot.set_pose(*orig)
 
